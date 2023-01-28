@@ -1,0 +1,25 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+	"build_systems": [
+		{
+			"name": "Build",
+			"shell_cmd": "modloader64 -b",
+			"working_dir": "$project_path"
+		},
+		{
+			"name": "Run",
+			"shell_cmd": "modloader64 -r 1",
+			"working_dir": "$project_path"
+		},
+		{
+			"name": "Build & Run",
+			"shell_cmd": "modloader64 -b && modloader64 -r 1",
+			"working_dir": "$project_path"
+		}
+	]
+}
