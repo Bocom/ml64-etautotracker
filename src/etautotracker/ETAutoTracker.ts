@@ -1,6 +1,7 @@
 import { IModLoaderAPI, IPlugin } from 'modloader64_api/IModLoaderAPI';
-import * as net from 'net';
-import * as base64 from 'base64-arraybuffer';
+import net from 'net';
+import base64 from 'base64-arraybuffer';
+import { StateMachine } from './StateMachine';
 
 enum CommandType {
     ReadByte = 0x00,
@@ -45,26 +46,57 @@ interface Response {
     block?: string,
 }
 
+const SIZE_BYTE_COUNT = 4;
+const ET_HOST = 'localhost';
+const ET_PORT = 43884;
+const ET_RETRY_TIMEOUT = 5000;
+
+const STATE_CONNECTING = Symbol();
+const STATE_CONNECTED = Symbol();
+const STATE_EXIT = Symbol();
+
 export default class ETAutoTracker implements IPlugin {
     ModLoader = {} as IModLoaderAPI;
 
     pluginName: 'ETAutoTracker';
 
+    client: net.Socket;
+
+    stateMachine: StateMachine;
+
     commands: Buffer[];
 
-    client: net.Socket;
+    messageSize: number = 0;
 
     constructor() {
         this.commands = [];
+        this.stateMachine = new StateMachine();
+
+        this.stateMachine.registerState(STATE_CONNECTING, {
+            onEnter: () => this.connect(),
+        });
+        this.stateMachine.registerState(STATE_CONNECTED, {
+            onTick: () => this.stateTick(),
+            onExit: () => this.client.destroy(),
+        });
+        this.stateMachine.registerState(STATE_EXIT, {
+            onEnter: () => this.client.destroy(),
+        });
     }
 
     preinit() {}
     init() {}
     postinit() {
-        this.connect();
+        this.stateMachine.setState(STATE_CONNECTING);
     }
     onTick(_frame: number) {
-        if (this.client === null || !this.client.writable) {
+        this.stateMachine.tick();
+    }
+
+    stateTick() {
+        if (!this.client.writable) {
+            this.ModLoader.logger.error('Lost connection, reconnecting...');
+            this.stateMachine.setState(STATE_CONNECTING);
             return;
         }
 
@@ -80,28 +112,46 @@ export default class ETAutoTracker implements IPlugin {
     }
 
     connect() {
-        this.ModLoader.logger.info("Connecting to EmoTracker on port 43884");
+        this.ModLoader.logger.info(`Connecting to EmoTracker on port ${ET_PORT}`);
 
-        this.client = net.createConnection(43884);
+        this.client = net.createConnection({
+            host: ET_HOST,
+            port: ET_PORT,
+        });
+
         this.client.setNoDelay(true);
 
-        this.client.on('connect', () => this.ModLoader.logger.info('Connected!'));
+        this.client.on('connect', () => {
+            this.ModLoader.logger.info('Connected!');
 
-        const sizeBytesCount = 4;
-        let messageSize: number = 0;
+            this.stateMachine.setState(STATE_CONNECTED);
+        });
 
-        // TODO: Handle EmoTracker not being open when it starts.
-        // TODO: Reconnection loop
+        this.client.on('error', (err) => {
+            this.ModLoader.logger.error(err.message);
 
-        this.client.on('readable', () => {
-            // The EmoTracker packet format is as follows
-            // <a><b><c><d><data>
-            // a, b, c and d is the size of the data as single bytes meant to be OR'd together.
-            // data is a JSON object containing the command
+            setTimeout(() => {
+                if (this.stateMachine.currentStateName === STATE_CONNECTING) {
+                    this.connect();
+                } else {
+                    this.stateMachine.setState(STATE_CONNECTING)
+                }
+            }, ET_RETRY_TIMEOUT);
+        });
 
-            while (true) {
-                if (messageSize === 0) {
-                    const chunk: Buffer = this.client.read(sizeBytesCount);
+        this.client.on('readable', () => this.handleData());
+    }
+
+    handleData() {
+        // The EmoTracker packet format is as follows
+        // <a><b><c><d><data>
+        // a, b, c and d is the size of the data as single bytes meant to be OR'd together.
+        // data is a JSON object containing the command
+
+        while (true) {
+            if (this.messageSize === 0) {
+                try {
+                    const chunk: Buffer = this.client.read(SIZE_BYTE_COUNT);
                     if (chunk === null) {
                         break;
                     }
@@ -111,21 +161,27 @@ export default class ETAutoTracker implements IPlugin {
                     const c = chunk[2] << 8;
                     const d = chunk[3];
 
-                    messageSize = a | b | c | d;
+                    this.messageSize = a | b | c | d;
+                } catch (e) {
+                    this.ModLoader.logger.error(e);
                 }
+            }
 
-                if (messageSize !== 0) {
-                    const messageChunk: Buffer = this.client.read(messageSize);
+            if (this.messageSize !== 0) {
+                try {
+                    const messageChunk: Buffer = this.client.read(this.messageSize);
                     if (messageChunk === null) {
                         break;
                     }
 
                     this.commands.push(messageChunk);
 
-                    messageSize = 0;
+                    this.messageSize = 0;
+                } catch (e) {
+                    this.ModLoader.logger.error(e);
                 }
             }
-        });
+        }
     }
 
     handleCommand(command: Command): Response {
@@ -175,13 +231,13 @@ export default class ETAutoTracker implements IPlugin {
         const data = JSON.stringify(response);
         const length = data.length;
 
-        const array = new Uint8Array(length + 4);
+        const array = new Uint8Array(length + SIZE_BYTE_COUNT);
         array[0] = (length >> 24) & 0xFF;
         array[1] = (length >> 16) & 0xFF;
         array[2] = (length >> 8) & 0xFF;
         array[3] = length & 0xFF;
         for (let i = 0; i < length; i++) {
-            array[4 + i] = data.charCodeAt(i);
+            array[SIZE_BYTE_COUNT + i] = data.charCodeAt(i);
         }
 
         this.client.write(array);
