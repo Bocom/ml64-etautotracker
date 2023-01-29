@@ -148,7 +148,8 @@ export default class ETAutoTracker implements IPlugin {
             const minor = (value >> 8) & 0xFF;
             const patch = value & 0xFF;
 
-            this.ModLoader.logger.info(`EmoTracker version ${major}.${minor}.${patch}`);
+            // Technically not the version of EmoTracker
+            this.ModLoader.logger.info(`EmoTracker pack version ${major}.${minor}.${patch}`);
 
             response.message = 'N64'; // TODO: Support other supported emulators later?
         } else if (commandType === CommandType.ReadByte) {

@@ -1,8 +1,7 @@
 {
-  "name": "ml64-emotracker",
+  "name": "etautotracker",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {},
   "keywords": [],
   "author": "",
