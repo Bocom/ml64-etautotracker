@@ -1,4 +1,4 @@
-import { ILoggerLevels, IModLoaderAPI, IPlugin } from 'modloader64_api/IModLoaderAPI';
+import { IModLoaderAPI, IPlugin } from 'modloader64_api/IModLoaderAPI';
 import * as net from 'net';
 import * as base64 from 'base64-arraybuffer';
 
@@ -45,38 +45,10 @@ interface Response {
     block?: string,
 }
 
-function atl(address: number) {
-    return {
-        1943144: "Live Chest Data 1",
-        1943146: "Live Chest Data 2",
-        1161516: "Game Mode 1",
-        1161519: "Game Mode 2",
-        1156588: "File Validation String",
-        4197564: "Rando FREE_SCARECROW_ENABLED",
-        1156610: "Magic Meter Data",
-        1156622: "Biggoron Data",
-        1156674: "Item Data 1",
-        1156714: "Item Data 2",
-        1156721: "Quest Data",
-        1156751: "Key Data",
-        1156772: "Save Context Dungeons 1",
-        1156856: "Save Context Dungeons 2",
-        1156940: "Save Context Dungeons 3",
-        1157024: "Save Context Dungeons 4",
-        1157108: "Save Context Dungeons 5",
-        1158020: "Save Context Shops",
-        1158228: "Save Context Overworld 1",
-        1158928: "Save Context Overworld 2",
-        1160300: "Skulltula Data",
-        1160332: "INF Tables",
-        1876424: "Global Context Switch Data",
-        1876440: "Global Context Chest Data",
-        1876452: "Global Context Collectible Data",
-    }[address] ?? `Unknown address ${address}`;
-}
-
-export default class PluginName implements IPlugin {
+export default class ETAutoTracker implements IPlugin {
     ModLoader = {} as IModLoaderAPI;
+
+    pluginName: 'ETAutoTracker';
 
     commands: Buffer[];
 
@@ -92,7 +64,7 @@ export default class PluginName implements IPlugin {
         this.connect();
     }
     onTick(_frame: number) {
-        if (this.client === null) {
+        if (this.client === null || !this.client.writable) {
             return;
         }
 
@@ -100,21 +72,23 @@ export default class PluginName implements IPlugin {
             return;
         }
 
-        this.ModLoader.logger.info(`queue length = ${this.commands.length}`);
+        const commandData = this.commands.shift()!;
+        const command = JSON.parse(commandData.toString()) as Command;
 
-        this.handleCommand(JSON.parse(this.commands.shift()!.toString()) as Command);
+        const response = this.handleCommand(command);
+        this.sendResponse(response);
     }
 
     connect() {
         this.ModLoader.logger.info("Connecting to EmoTracker on port 43884");
+
         this.client = net.createConnection(43884);
+        this.client.setNoDelay(true);
 
         this.client.on('connect', () => this.ModLoader.logger.info('Connected!'));
 
-        this.client.setNoDelay(true);
-
         const sizeBytesCount = 4;
-        let messageSize = 0;
+        let messageSize: number = 0;
 
         // TODO: Handle EmoTracker not being open when it starts.
         // TODO: Reconnection loop
@@ -122,13 +96,12 @@ export default class PluginName implements IPlugin {
         this.client.on('readable', () => {
             // The EmoTracker packet format is as follows
             // <a><b><c><d><data>
-            // a, b, c and d is the size of the data as single ASCII characters.
+            // a, b, c and d is the size of the data as single bytes meant to be OR'd together.
             // data is a JSON object containing the command
 
             while (true) {
                 if (messageSize === 0) {
                     const chunk: Buffer = this.client.read(sizeBytesCount);
-
                     if (chunk === null) {
                         break;
                     }
@@ -144,11 +117,8 @@ export default class PluginName implements IPlugin {
                 if (messageSize !== 0) {
                     const messageChunk: Buffer = this.client.read(messageSize);
                     if (messageChunk === null) {
-                        console.log(`messageChunk null ${messageSize} ${this.client.bytesRead}`);
                         break;
                     }
-
-                    // this.ModLoader.logger.debug(`-> ${messageChunk.toString()}`);
 
                     this.commands.push(messageChunk);
 
@@ -158,10 +128,10 @@ export default class PluginName implements IPlugin {
         });
     }
 
-    handleCommand(command: Command) {
+    handleCommand(command: Command): Response {
         const commandType = command.type as CommandType;
 
-        const retval: Response = {
+        const response: Response = {
             id: command.id,
             stamp: Math.floor(Date.now() / 1000),
             type: command.type,
@@ -180,55 +150,39 @@ export default class PluginName implements IPlugin {
 
             this.ModLoader.logger.info(`EmoTracker version ${major}.${minor}.${patch}`);
 
-            // retval.message = 'SNES'; // coavins' Hamsda autotracker fork uses SNES for some reason
-            retval.message = 'N64'; // PugHUD uses N64
-            retval.value = 131584;
+            response.message = 'N64'; // TODO: Support other supported emulators later?
         } else if (commandType === CommandType.ReadByte) {
-            // this.ModLoader.logger.info(`Reading byte at ${command.address}`);
-            // this.ModLoader.logger.debug(atl(command.address!));
-
-            retval.value = this.ModLoader.emulator.rdramRead8(command.address!);
-            // this.ModLoader.logger.debug(retval.value.toString());
+            response.value = this.ModLoader.emulator.rdramRead8(command.address!);
         } else if (commandType === CommandType.ReadUshort) {
-            // this.ModLoader.logger.info(`Reading ushort at ${command.address}`);
-            // this.ModLoader.logger.debug(atl(command.address!));
-
-            retval.value = this.ModLoader.emulator.rdramRead16(command.address!);
-            // this.ModLoader.logger.debug(retval.value.toString());
-        } else if (commandType === CommandType.Message) {
-            this.ModLoader.logger.info(command.message!);
+            response.value = this.ModLoader.emulator.rdramRead16(command.address!);
         } else if (commandType === CommandType.ReadBlock) {
-            // this.ModLoader.logger.info(`Reading ${command.value} bytes from ${command.address}`);
-            // this.ModLoader.logger.debug(atl(command.address!));
-
-            this.ModLoader.logger.info(command.address!.toString(), command.value!.toString());
-
             const bytes = this.ModLoader.emulator.rdramReadBuffer(command.address!, command.value!);
 
-            let result = '';
-            for (const byte of bytes.values()) {
-                result += String.fromCharCode(byte);
-            }
-
-            retval.block = btoa(result);
-            // retval.block = base64.encode(bytes);
+            response.block = base64.encode(bytes);
+        } else if (commandType === CommandType.Message) {
+            this.ModLoader.logger.info(command.message!);
         } else if (commandType === CommandType.DoNothing) {
             //
         } else {
             this.ModLoader.logger.error(`Unhandled command type '${CommandType[command.type]}'`);
         }
 
-        let data = JSON.stringify(retval);
-        let length = data.length;
+        return response;
+    }
 
-        const a = String.fromCharCode((length >> 24) & 0xFF);
-        const b = String.fromCharCode((length >> 16) & 0xFF);
-        const c = String.fromCharCode((length >> 8) & 0xFF);
-        const d = String.fromCharCode(length & 0xFF);
+    sendResponse(response: Response) {
+        const data = JSON.stringify(response);
+        const length = data.length;
 
-        // this.ModLoader.logger.debug(`<- ${data}`);
+        const array = new Uint8Array(length + 4);
+        array[0] = (length >> 24) & 0xFF;
+        array[1] = (length >> 16) & 0xFF;
+        array[2] = (length >> 8) & 0xFF;
+        array[3] = length & 0xFF;
+        for (let i = 0; i < length; i++) {
+            array[4 + i] = data.charCodeAt(i);
+        }
 
-        const sent = this.client.write(`${a}${b}${c}${d}${data}`);
-        this.ModLoader.logger.debug(`${command.id} sent = ${sent ? 'yes' : 'no'}`);
+        this.client.write(array);
     }
 }
