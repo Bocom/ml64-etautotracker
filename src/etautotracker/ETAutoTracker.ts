@@ -58,7 +58,7 @@ const STATE_EXIT = Symbol();
 export default class ETAutoTracker implements IPlugin {
     ModLoader = {} as IModLoaderAPI;
 
-    pluginName: 'ETAutoTracker';
+    pluginName = 'ETAutoTracker';
 
     client: net.Socket;
 
