@@ -9,29 +9,29 @@ export class StateMachine {
 
     public currentState: State|null;
 
-    public currentStateName: symbol|null;
+    public currentStateKey: symbol|null;
 
-    constructor() {
-        this.states = {};
+    constructor(states: Record<symbol, State> = {}) {
+        this.states = states;
         this.currentState = null;
-        this.currentStateName = null;
+        this.currentStateKey = null;
     }
 
-    registerState(name: symbol, state: State) {
-        this.states[name] = state;
+    registerState(key: symbol, state: State) {
+        this.states[key] = state;
     }
 
-    setState(name: symbol) {
-        if (name === this.currentStateName) {
+    setState(key: symbol) {
+        if (key === this.currentStateKey) {
             return;
         }
 
         this.currentState?.onExit?.call(null);
 
-        this.currentState = this.states[name] ?? null;
+        this.currentState = this.states[key] ?? null;
 
         if (this.currentState !== null) {
-            this.currentStateName = name;
+            this.currentStateKey = key;
         }
 
         this.currentState?.onEnter?.call(null);

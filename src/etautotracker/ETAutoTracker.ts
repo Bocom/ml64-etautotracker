@@ -70,17 +70,19 @@ export default class ETAutoTracker implements IPlugin {
 
     constructor() {
         this.commands = [];
-        this.stateMachine = new StateMachine();
 
-        this.stateMachine.registerState(STATE_CONNECTING, {
-            onEnter: () => this.connect(),
-        });
-        this.stateMachine.registerState(STATE_CONNECTED, {
-            onTick: () => this.stateTick(),
-            onExit: () => this.client.destroy(),
-        });
-        this.stateMachine.registerState(STATE_EXIT, {
-            onEnter: () => this.client.destroy(),
+        this.stateMachine = new StateMachine({
+            [STATE_CONNECTING]: {
+                onEnter: () => this.connect(),
+            },
+            [STATE_CONNECTED]: {
+                onEnter: () => this.ModLoader.logger.info('Connected!'),
+                onTick: () => this.connectedTick(),
+                onExit: () => this.client.destroy(),
+            },
+            [STATE_EXIT]: {
+                onEnter: () => this.client.destroy(),
+            },
         });
     }
 
@@ -93,7 +95,7 @@ export default class ETAutoTracker implements IPlugin {
         this.stateMachine.tick();
     }
 
-    stateTick() {
+    connectedTick() {
         if (!this.client.writable) {
             this.ModLoader.logger.error('Lost connection, reconnecting...');
             this.stateMachine.setState(STATE_CONNECTING);
@@ -122,8 +124,6 @@ export default class ETAutoTracker implements IPlugin {
         this.client.setNoDelay(true);
 
         this.client.on('connect', () => {
-            this.ModLoader.logger.info('Connected!');
-
             this.stateMachine.setState(STATE_CONNECTED);
         });
 
@@ -131,7 +131,7 @@ export default class ETAutoTracker implements IPlugin {
             this.ModLoader.logger.error(err.message);
 
             setTimeout(() => {
-                if (this.stateMachine.currentStateName === STATE_CONNECTING) {
+                if (this.stateMachine.currentStateKey === STATE_CONNECTING) {
                     this.connect();
                 } else {
                     this.stateMachine.setState(STATE_CONNECTING)
