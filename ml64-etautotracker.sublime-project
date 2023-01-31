@@ -18,12 +18,12 @@
 		},
 		{
 			"name": "Build & Run",
-			"shell_cmd": "modloader64 -b && modloader64 -r 1",
+			"shell_cmd": "modloader64 -br 1",
 			"working_dir": "$project_path"
 		},
 		{
 			"name": "Build & Package",
-			"shell_cmd": "modloader64 -b && modloader64 -d",
+			"shell_cmd": "modloader64 -cbd",
 			"working_dir": "$project_path"
 		}
 	]
