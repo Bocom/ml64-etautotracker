@@ -151,15 +151,15 @@ export default class ETAutoTracker implements IPlugin {
         while (true) {
             if (this.messageSize === 0) {
                 try {
-                    const chunk: Buffer = this.client.read(SIZE_BYTE_COUNT);
-                    if (chunk === null) {
+                    const sizeChunk: Buffer = this.client.read(SIZE_BYTE_COUNT);
+                    if (sizeChunk === null) {
                         break;
                     }
 
-                    const a = chunk[0] << 24;
-                    const b = chunk[1] << 16;
-                    const c = chunk[2] << 8;
-                    const d = chunk[3];
+                    const a = sizeChunk[0] << 24;
+                    const b = sizeChunk[1] << 16;
+                    const c = sizeChunk[2] << 8;
+                    const d = sizeChunk[3];
 
                     this.messageSize = a | b | c | d;
                 } catch (e) {
@@ -205,9 +205,10 @@ export default class ETAutoTracker implements IPlugin {
             const patch = value & 0xFF;
 
             // Technically not the version of EmoTracker
-            this.ModLoader.logger.info(`EmoTracker pack version ${major}.${minor}.${patch}`);
+            this.ModLoader.logger.info(`Version received from EmoTracker: ${major}.${minor}.${patch}`);
 
-            response.message = 'N64'; // TODO: Support other supported emulators later?
+            // TODO: Support other supported emulators later?
+            response.message = 'N64';
         } else if (commandType === CommandType.ReadByte) {
             response.value = this.ModLoader.emulator.rdramRead8(command.address!);
         } else if (commandType === CommandType.ReadUshort) {
