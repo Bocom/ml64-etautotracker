@@ -212,6 +212,8 @@ export default class ETAutoTracker implements IPlugin {
             response.value = this.ModLoader.emulator.rdramRead8(command.address!);
         } else if (commandType === CommandType.ReadUshort) {
             response.value = this.ModLoader.emulator.rdramRead16(command.address!);
+        } else if (commandType === CommandType.ReadUint) {
+            response.value = this.ModLoader.emulator.rdramRead32(command.address!);
         } else if (commandType === CommandType.ReadBlock) {
             const bytes = this.ModLoader.emulator.rdramReadBuffer(command.address!, command.value!);
 
