@@ -22,7 +22,7 @@ enum CommandType {
     GetEmulatorCoreId = 0xE3,
     Message = 0xF0,
     DoNothing = 0xFF,
-};
+}
 
 interface Command {
     id: number;
@@ -35,15 +35,15 @@ interface Command {
 }
 
 interface Response {
-    id: number,
-    stamp: number,
-    type: number,
-    message: string,
-    address: number,
-    size: number,
-    domain: string,
-    value: number,
-    block?: string,
+    id: number;
+    stamp: number;
+    type: number;
+    message: string;
+    address: number;
+    size: number;
+    domain: string;
+    value: number;
+    block?: string;
 }
 
 const SIZE_BYTE_COUNT = 4;
@@ -134,7 +134,7 @@ export default class ETAutoTracker implements IPlugin {
                 if (this.stateMachine.currentStateKey === STATE_CONNECTING) {
                     this.connect();
                 } else {
-                    this.stateMachine.setState(STATE_CONNECTING)
+                    this.stateMachine.setState(STATE_CONNECTING);
                 }
             }, ET_RETRY_TIMEOUT);
         });
